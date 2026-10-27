@@ -1,0 +1,58 @@
+name: Build OrangeFox Recovery (PQ84P01)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "fox_14.1" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 6144
+          temp-reserve-mb: 1024
+          swap-storage-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: '/mnt/fox_build'
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git aria2 rsync curl zip unzip tar python3 python-is-python3 bc bison flex gnupg gperf lib32ncurses5-dev lib32z1-dev libc6-dev-i386 libelf-dev libgl1-mesa-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev fontconfig
+
+      - name: Sync OrangeFox 14.1 Source
+        run: |
+          sudo chown -R $USER:$USER /mnt/fox_build
+          mkdir -p ~/OrangeFox_sync && cd ~/OrangeFox_sync
+          git clone https://gitlab.com/OrangeFox/sync.git
+          cd sync
+          ./orangefox_sync.sh --branch 14.1 --path /mnt/fox_build/fox_14.1
+
+      - name: Clone PQ84P01 Device Tree
+        run: |
+          git clone https://github.com/ruwaid-7/orangefox_device_nubia_PQ84P01.git -b fox_14.1 /mnt/fox_build/fox_14.1/device/nubia/PQ84P01
+
+      - name: Compile OrangeFox Recovery
+        run: |
+          cd /mnt/fox_build/fox_14.1
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export FOX_BUILD_DEVICE=PQ84P01
+          export LC_ALL="C"
+          source build/envsetup.sh
+          lunch twrp_PQ84P01-ap2a-eng || lunch twrp_PQ84P01-eng
+          mka adbd recoveryimage
+
+      - name: Upload Compiled OrangeFox Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrangeFox-R11.1-PQ84P01
+          path: |
+            /mnt/fox_build/fox_14.1/out/target/product/PQ84P01/OrangeFox*.zip
+            /mnt/fox_build/fox_14.1/out/target/product/PQ84P01/OrangeFox*.img
+            /mnt/fox_build/fox_14.1/out/target/product/PQ84P01/recovery.img
